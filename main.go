@@ -122,6 +122,9 @@ func PrintHelp() {
 	fmt.Println("  pull-local   仅拉取镜像到本地，不推送到 Harbor 仓库")
 	fmt.Println("               注意: 请不要在镜像名称中添加域名")
 	fmt.Println("")
+	fmt.Println("  push         推送本地镜像到 Harbor 仓库")
+	fmt.Println("               注意: 请不要在镜像名称中添加域名")
+	fmt.Println("")
 	fmt.Println("  help         显示帮助信息")
 	fmt.Println("")
 	fmt.Println("注意: 如果需要使用自签名证书的私有仓库，请在 /etc/docker/daemon.json 中配置：")
@@ -266,7 +269,6 @@ func main() {
 
 		fmt.Println("镜像成功同步！")
 
-		
 	case "pull-local":
 		if len(os.Args) != 3 {
 			fmt.Println("用法: docker-mirror pull-local <镜像>")
@@ -334,6 +336,54 @@ func main() {
 		}
 
 		fmt.Println("您的镜像已成功拉取到本地！")
+	case "push":
+		if len(os.Args) != 3 {
+			fmt.Println("用法: docker-mirror push <镜像>")
+			return
+		}
+
+		image := os.Args[2]
+
+		// 加载配置
+		config, err := LoadConfig(configPath)
+		if err != nil {
+			log.Fatalf("加载配置出错: %v", err)
+		}
+
+		// 解析镜像名称
+		part := strings.Split(image, "/")
+		if len(part) == 1 {
+			part = append([]string{"library"}, part[0])
+		}
+
+		// 构建目标镜像名称
+		targetImage := fmt.Sprintf("%s/%s/%s", config.Harbor.Domain, config.Harbor.Project, part[len(part)-1])
+
+		// 将镜像标记为目标域名
+		fmt.Printf("正在将镜像 %s 标记为 %s\n", image, targetImage)
+		if output, err := Execute("docker", "tag", image, targetImage); err != nil {
+			log.Fatalf("标记镜像出错: %v\n%s", err, output)
+		}
+
+		// 登录到 Harbor 仓库
+		fmt.Printf("正在登录到 Harbor 仓库 %s\n", config.Harbor.Domain)
+		if output, err := Execute("docker", "login", config.Harbor.Domain, "-u", config.Harbor.Username, "-p", config.Harbor.Password); err != nil {
+			log.Fatalf("登录 Harbor 出错: %v\n%s", err, output)
+		}
+
+		// 推送镜像到 Harbor 仓库
+		fmt.Printf("正在推送镜像 %s\n", targetImage)
+		if output, err := Execute("docker", "push", targetImage); err != nil {
+			log.Fatalf("推送镜像出错: %v\n%s", err, output)
+		}
+
+		// 清理本地标记的镜像
+		fmt.Printf("正在清理本地镜像 %s\n", targetImage)
+		if err := CleanImage(targetImage); err != nil {
+			log.Fatalf("清理本地镜像出错: %v", err)
+		}
+
+		fmt.Println("镜像成功推送到Harbor！")
 	case "help":
 		PrintHelp()
 	default:
