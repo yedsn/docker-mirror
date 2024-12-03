@@ -65,6 +65,18 @@ func Execute(command string, args ...string) (string, error) {
 	return string(output), err
 }
 
+// 标记镜像
+func TagImage(image string, targetImage string) error {
+	_, err := Execute("docker", "tag", image, image)
+	return err
+}
+
+// 清理镜像
+func CleanImage(image string) error {
+	_, err := Execute("docker", "rmi", image)
+	return err
+}
+
 // Prompt 提示用户输入
 func Prompt(prompt string) string {
 	fmt.Print(prompt)
@@ -163,6 +175,18 @@ func main() {
 		// 首先尝试从Harbor拉取
 		fmt.Printf("正在从Harbor拉取镜像 %s\n", harborImage)
 		if output, err := Execute("docker", "pull", harborImage); err == nil {
+
+			// 标记为镜像名
+			fmt.Printf("正在将镜像 %s 标记为 %s\n", harborImage, image)
+			if output, err := Execute("docker", "tag", harborImage, image); err != nil {
+				log.Fatalf("标记镜像出错: %v\n%s", err, output)
+			}
+
+			// 清理本地镜像
+			fmt.Printf("正在清理本地镜像 %s\n", harborImage)
+			if err := CleanImage(harborImage); err != nil {
+				log.Fatalf("清理本地镜像出错: %v", err)
+			}
 			pullErr = nil
 			sourceRegistry = config.Harbor.Domain
 			sourceImage = harborImage
@@ -188,6 +212,18 @@ func main() {
 						fmt.Printf("拉取镜像出错: %v\n%s", err, output)
 						pullErr = err
 					} else {
+						// 标记为镜像名
+						fmt.Printf("正在将镜像 %s 标记为 %s\n", registryImage, image)
+						if output, err := Execute("docker", "tag", registryImage, image); err != nil {
+							log.Fatalf("标记镜像出错: %v\n%s", err, output)
+						}
+
+						// 清理本地镜像
+						fmt.Printf("正在清理本地镜像 %s\n", registryImage)
+						if err := CleanImage(registryImage); err != nil {
+							log.Fatalf("清理本地镜像出错: %v", err)
+						}
+
 						pullErr = nil
 						sourceRegistry = registry
 						sourceImage = registryImage
@@ -204,8 +240,8 @@ func main() {
 		// 如果不是从Harbor拉取的，需要标记并推送到Harbor
 		if sourceRegistry != config.Harbor.Domain {
 			// 将镜像标记为目标域名
-			fmt.Printf("正在将镜像 %s 标记为 %s\n", sourceImage, targetImage)
-			if output, err := Execute("docker", "tag", sourceImage, targetImage); err != nil {
+			fmt.Printf("正在将镜像 %s 标记为 %s\n", image, targetImage)
+			if output, err := Execute("docker", "tag", image, targetImage); err != nil {
 				log.Fatalf("标记镜像出错: %v\n%s", err, output)
 			}
 
@@ -220,9 +256,17 @@ func main() {
 			if output, err := Execute("docker", "push", targetImage); err != nil {
 				log.Fatalf("推送镜像出错: %v\n%s", err, output)
 			}
+
+			// 清理本地镜像
+			fmt.Printf("正在清理本地镜像 %s\n", targetImage)
+			if err := CleanImage(targetImage); err != nil {
+				log.Fatalf("清理本地镜像出错: %v", err)
+			}
 		}
 
 		fmt.Println("镜像成功同步！")
+
+		
 	case "pull-local":
 		if len(os.Args) != 3 {
 			fmt.Println("用法: docker-mirror pull-local <镜像>")
@@ -246,6 +290,17 @@ func main() {
 				fmt.Printf("拉取镜像出错: %v\n%s", err, output)
 				pullErr = err
 			} else {
+				// 标记为镜像名
+				fmt.Printf("正在将镜像 %s 标记为 %s\n", sourceImage, image)
+				if output, err := Execute("docker", "tag", sourceImage, image); err != nil {
+					log.Fatalf("标记镜像出错: %v\n%s", err, output)
+				}
+
+				// 清理本地镜像
+				fmt.Printf("正在清理本地镜像 %s\n", sourceImage)
+				if err := CleanImage(sourceImage); err != nil {
+					log.Fatalf("清理本地镜像出错: %v", err)
+				}
 				pullErr = nil
 			}
 		} else {
@@ -254,6 +309,18 @@ func main() {
 				fmt.Printf("正在从 %s 拉取镜像 %s\n", registry, sourceImage)
 				if output, err := Execute("docker", "pull", fmt.Sprintf("%s/%s", registry, sourceImage)); err != nil {
 					fmt.Printf("拉取镜像出错: %v\n%s", err, output)
+
+					// 标记为镜像名
+					fmt.Printf("正在将镜像 %s 标记为 %s\n", fmt.Sprintf("%s/%s", registry, sourceImage), image)
+					if output, err := Execute("docker", "tag", fmt.Sprintf("%s/%s", registry, sourceImage), image); err != nil {
+						log.Fatalf("标记镜像出错: %v\n%s", err, output)
+					}
+
+					// 清理本地镜像
+					fmt.Printf("正在清理本地镜像 %s\n", fmt.Sprintf("%s/%s", registry, sourceImage))
+					if err := CleanImage(fmt.Sprintf("%s/%s", registry, sourceImage)); err != nil {
+						log.Fatalf("清理本地镜像出错: %v", err)
+					}
 					pullErr = err
 				} else {
 					pullErr = nil
