@@ -111,6 +111,11 @@ func PrintHelp() {
 	fmt.Println("               注意: 请不要在镜像名称中添加域名")
 	fmt.Println("")
 	fmt.Println("  help         显示帮助信息")
+	fmt.Println("")
+	fmt.Println("注意: 如果需要使用自签名证书的私有仓库，请在 /etc/docker/daemon.json 中配置：")
+	fmt.Println(`{
+		"insecure-registries": ["your-registry-domain:port"]
+	}`)
 }
 
 func main() {
@@ -150,57 +155,71 @@ func main() {
 		}
 
 		targetImage := fmt.Sprintf("%s/%s/%s", config.Harbor.Domain, config.Harbor.Project, part[len(part)-1])
+		harborImage := targetImage
 
 		var pullErr error
-		var pulledRegistry string
-		if len(config.DockerRegistries) == 0 {
-			// 如果 DockerRegistries 为空，则直接拉取不带域名的镜像
-			fmt.Printf("正在拉取镜像 %s\n", sourceImage)
-			if output, err := Execute("docker", "pull", sourceImage); err != nil {
-				fmt.Printf("拉取镜像出错: %v\n%s", err, output)
-				pullErr = err
-			} else {
-				pullErr = nil
-				pulledRegistry = ""
-			}
+		var sourceRegistry string
+
+		// 首先尝试从Harbor拉取
+		fmt.Printf("正在从Harbor拉取镜像 %s\n", harborImage)
+		if output, err := Execute("docker", "pull", harborImage); err == nil {
+			pullErr = nil
+			sourceRegistry = config.Harbor.Domain
+			sourceImage = harborImage
 		} else {
-			for _, registry := range config.DockerRegistries {
-				// 从配置的 Docker 镜像仓库地址拉取镜像
-				fmt.Printf("正在从 %s 拉取镜像 %s\n", registry, sourceImage)
-				if output, err := Execute("docker", "pull", fmt.Sprintf("%s/%s", registry, sourceImage)); err != nil {
+			fmt.Printf("从Harbor拉取失败: %v\n%s", err, output)
+			// 如果从Harbor拉取失败，尝试其他镜像源
+			if len(config.DockerRegistries) == 0 {
+				// 如果 DockerRegistries 为空，则直接拉取不带域名的镜像
+				fmt.Printf("正在从DockerHub拉取镜像 %s\n", sourceImage)
+				if output, err := Execute("docker", "pull", sourceImage); err != nil {
 					fmt.Printf("拉取镜像出错: %v\n%s", err, output)
 					pullErr = err
 				} else {
 					pullErr = nil
-					pulledRegistry = registry
-					break
+					sourceRegistry = ""
+				}
+			} else {
+				for _, registry := range config.DockerRegistries {
+					// 从配置的 Docker 镜像仓库地址拉取镜像
+					fmt.Printf("正在从 %s 拉取镜像 %s\n", registry, sourceImage)
+					registryImage := fmt.Sprintf("%s/%s", registry, sourceImage)
+					if output, err := Execute("docker", "pull", registryImage); err != nil {
+						fmt.Printf("拉取镜像出错: %v\n%s", err, output)
+						pullErr = err
+					} else {
+						pullErr = nil
+						sourceRegistry = registry
+						sourceImage = registryImage
+						break
+					}
 				}
 			}
 		}
 
 		if pullErr != nil {
-			log.Fatalf("从所有配置的 DockerRegistry 拉取镜像均失败")
+			log.Fatalf("从所有配置的镜像源拉取镜像均失败")
 		}
 
-		// 将镜像标记为目标域名
-		if pulledRegistry != "" {
-			sourceImage = fmt.Sprintf("%s/%s", pulledRegistry, sourceImage)
-		}
-		fmt.Printf("正在将镜像 %s 标记为 %s\n", sourceImage, targetImage)
-		if output, err := Execute("docker", "tag", sourceImage, targetImage); err != nil {
-			log.Fatalf("标记镜像出错: %v\n%s", err, output)
-		}
+		// 如果不是从Harbor拉取的，需要标记并推送到Harbor
+		if sourceRegistry != config.Harbor.Domain {
+			// 将镜像标记为目标域名
+			fmt.Printf("正在将镜像 %s 标记为 %s\n", sourceImage, targetImage)
+			if output, err := Execute("docker", "tag", sourceImage, targetImage); err != nil {
+				log.Fatalf("标记镜像出错: %v\n%s", err, output)
+			}
 
-		// 登录到 Harbor 仓库
-		fmt.Printf("正在登录到 Harbor 仓库 %s\n", config.Harbor.Domain)
-		if output, err := Execute("docker", "login", config.Harbor.Domain, "-u", config.Harbor.Username, "-p", config.Harbor.Password); err != nil {
-			log.Fatalf("登录 Harbor 出错: %v\n%s", err, output)
-		}
+			// 登录到 Harbor 仓库
+			fmt.Printf("正在登录到 Harbor 仓库 %s\n", config.Harbor.Domain)
+			if output, err := Execute("docker", "login", config.Harbor.Domain, "-u", config.Harbor.Username, "-p", config.Harbor.Password); err != nil {
+				log.Fatalf("登录 Harbor 出错: %v\n%s", err, output)
+			}
 
-		// 推送镜像到 Harbor 仓库
-		fmt.Printf("正在推送镜像 %s\n", targetImage)
-		if output, err := Execute("docker", "push", targetImage); err != nil {
-			log.Fatalf("推送镜像出错: %v\n%s", err, output)
+			// 推送镜像到 Harbor 仓库
+			fmt.Printf("正在推送镜像 %s\n", targetImage)
+			if output, err := Execute("docker", "push", targetImage); err != nil {
+				log.Fatalf("推送镜像出错: %v\n%s", err, output)
+			}
 		}
 
 		fmt.Println("镜像成功同步！")
@@ -222,7 +241,7 @@ func main() {
 		var pullErr error
 		if len(config.DockerRegistries) == 0 {
 			// 如果 DockerRegistries 为空，则直接拉取不带域名的镜像
-			fmt.Printf("正在拉取镜像 %s\n", sourceImage)
+			fmt.Printf("正在从DockerHub拉取镜像 %s\n", sourceImage)
 			if output, err := Execute("docker", "pull", sourceImage); err != nil {
 				fmt.Printf("拉取镜像出错: %v\n%s", err, output)
 				pullErr = err
