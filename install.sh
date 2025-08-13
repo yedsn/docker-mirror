@@ -3,7 +3,11 @@ PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 export PATH
 
 # Docker镜像转存工具安装脚本
-# 项目地址: https://github.com/yilingyi/docker-mirror
+# 项目地址: https://github.com/yedsn/docker-mirror
+
+# 获取网络环境参数
+netEnvCn="$1"
+echo "网络环境: ${netEnvCn}"
 
 # 颜色定义
 RED='\033[0;31m'
@@ -46,6 +50,10 @@ echo -e "${GREEN}===============================================${NC}"
 echo -e "${GREEN}    Docker镜像转存工具 安装脚本${NC}"
 echo -e "${GREEN}===============================================${NC}"
 echo ""
+echo -e "${YELLOW}使用方法:${NC}"
+echo -e "  默认安装: bash install.sh"
+echo -e "  国内环境: bash install.sh cn"
+echo ""
 
 # 检查系统信息
 echo -e "${YELLOW}检查系统信息...${NC}"
@@ -85,14 +93,37 @@ echo -e "${YELLOW}开始下载预编译二进制文件...${NC}"
 TEMP_DIR=$(mktemp -d)
 cd $TEMP_DIR
 
-# 直接下载二进制文件
-DOWNLOAD_URL="https://raw.githubusercontent.com/yedsn/docker-mirror/master/docker-mirror"
+# 根据网络环境选择下载源
+if [ "$netEnvCn" == "cn" ]; then
+    # 使用Gitee国内镜像源
+    DOWNLOAD_URL="https://gitee.com/hongxiaojian/docker-mirror/raw/master/docker-mirror"
+    echo -e "${YELLOW}使用国内镜像源（Gitee）...${NC}"
+else
+    # 使用GitHub源
+    DOWNLOAD_URL="https://raw.githubusercontent.com/yedsn/docker-mirror/master/docker-mirror"
+    echo -e "${YELLOW}使用GitHub源...${NC}"
+fi
 
 echo -e "下载地址: ${GREEN}$DOWNLOAD_URL${NC}"
 if ! wget -q --show-progress "$DOWNLOAD_URL" -O docker-mirror; then
     echo -e "${RED}下载失败，请检查网络连接${NC}"
-    rm -rf $TEMP_DIR
-    exit 1
+    if [ "$netEnvCn" == "cn" ]; then
+        echo -e "${YELLOW}尝试使用GitHub备用源...${NC}"
+        BACKUP_URL="https://raw.githubusercontent.com/yedsn/docker-mirror/master/docker-mirror"
+        if ! wget -q --show-progress "$BACKUP_URL" -O docker-mirror; then
+            echo -e "${RED}备用源下载也失败，请检查网络连接${NC}"
+            rm -rf $TEMP_DIR
+            exit 1
+        fi
+    else
+        echo -e "${YELLOW}尝试使用Gitee备用源...${NC}"
+        BACKUP_URL="https://gitee.com/hongxiaojian/docker-mirror/raw/master/docker-mirror"
+        if ! wget -q --show-progress "$BACKUP_URL" -O docker-mirror; then
+            echo -e "${RED}备用源下载也失败，请检查网络连接${NC}"
+            rm -rf $TEMP_DIR
+            exit 1
+        fi
+    fi
 fi
 
 # 安装二进制文件
@@ -144,5 +175,9 @@ echo -e "${YELLOW}使用示例:${NC}"
 echo -e "  docker-mirror pull nginx:latest"
 echo -e "  docker-mirror pull-local redis:alpine"
 echo -e "  docker-mirror push mysql:8.0"
+echo ""
+echo -e "${YELLOW}安装脚本使用方法:${NC}"
+echo -e "  海外环境: curl -fsSL https://raw.githubusercontent.com/yedsn/docker-mirror/master/install.sh | sudo bash"
+echo -e "  国内环境: curl -fsSL https://gitee.com/hongxiaojian/docker-mirror/raw/master/install.sh | sudo bash -s cn"
 echo ""
 echo -e "${GREEN}感谢使用 Docker镜像转存工具！${NC}"
