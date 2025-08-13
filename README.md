@@ -13,40 +13,59 @@
 * Harbor
 * 阿里云镜像仓库
 
-## 编译
+## 安装方式
 
-* 二进制文件（已编译好）下载地址
+### 方式一：一键安装脚本（推荐）
 
+**海外环境：**
 ```bash
-wget https://github.com/yilingyi/docker-mirror/releases/download/1.1.0/docker-mirror-1.1.0-amd64.tar.gz
+curl -fsSL https://raw.githubusercontent.com/yedsn/docker-mirror/master/install.sh | sudo bash
 ```
 
-* 源码编译
+**国内环境：**
+```bash
+curl -fsSL https://gitee.com/hongxiaojian/docker-mirror/raw/master/install.sh | sudo bash -s cn
+```
+
+### 方式二：手动安装
+
+* **直接下载二进制文件**
+
+```bash
+# 海外环境
+wget https://raw.githubusercontent.com/yedsn/docker-mirror/master/docker-mirror
+# 或国内环境
+wget https://gitee.com/hongxiaojian/docker-mirror/raw/master/docker-mirror
+
+# 添加执行权限并安装
+chmod +x docker-mirror && sudo cp docker-mirror /usr/bin
+```
+
+* **源码编译**
 
 ```bash
 # 下载仓库代码
-git clone https://github.com/yilingyi/docker-mirror.git
+git clone https://github.com/yedsn/docker-mirror.git
 
 # 进入仓库目录
 cd docker-mirror
 
 # 编译，生成二进制文件
 go build -o docker-mirror main.go
+
+# 安装到系统
+chmod +x docker-mirror && sudo cp docker-mirror /usr/bin
 ```
 
 ## 使用说明
 
-* 添加执行权限，并拷贝至`/usr/bin`目录下
-
-```bash
-chmod +x docker-mirror && cp docker-mirror /usr/bin
-```
-
-* 查看帮助信息
+### 验证安装
 
 ```bash
 docker-mirror help
 ```
+
+### 功能说明
 
 * 配置初始化
 
