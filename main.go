@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -63,6 +64,41 @@ func Execute(command string, args ...string) (string, error) {
 	cmd := exec.Command(command, args...)
 	output, err := cmd.CombinedOutput()
 	return string(output), err
+}
+
+// ExecuteWithProgress 执行一个命令并实时显示输出（用于 docker pull/push 显示进度）
+func ExecuteWithProgress(command string, args ...string) error {
+	cmd := exec.Command(command, args...)
+	
+	// 获取标准输出和标准错误的管道
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return err
+	}
+	
+	// 启动命令
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	
+	// 创建一个函数来实时输出
+	printOutput := func(pipe io.ReadCloser) {
+		scanner := bufio.NewScanner(pipe)
+		for scanner.Scan() {
+			fmt.Println(scanner.Text())
+		}
+	}
+	
+	// 并发处理标准输出和标准错误
+	go printOutput(stdout)
+	go printOutput(stderr)
+	
+	// 等待命令完成
+	return cmd.Wait()
 }
 
 // 标记镜像
@@ -177,7 +213,7 @@ func main() {
 
 		// 首先尝试从Harbor拉取
 		fmt.Printf("正在从Harbor拉取镜像 %s\n", harborImage)
-		if output, err := Execute("docker", "pull", harborImage); err == nil {
+		if err := ExecuteWithProgress("docker", "pull", harborImage); err == nil {
 
 			// 标记为镜像名
 			fmt.Printf("正在将镜像 %s 标记为 %s\n", harborImage, image)
@@ -194,13 +230,13 @@ func main() {
 			sourceRegistry = config.Harbor.Domain
 			sourceImage = harborImage
 		} else {
-			fmt.Printf("从Harbor拉取失败: %v\n%s", err, output)
+			fmt.Printf("从Harbor拉取失败: %v\n", err)
 			// 如果从Harbor拉取失败，尝试其他镜像源
 			if len(config.DockerRegistries) == 0 {
 				// 如果 DockerRegistries 为空，则直接拉取不带域名的镜像
 				fmt.Printf("正在从DockerHub拉取镜像 %s\n", sourceImage)
-				if output, err := Execute("docker", "pull", sourceImage); err != nil {
-					fmt.Printf("拉取镜像出错: %v\n%s", err, output)
+				if err := ExecuteWithProgress("docker", "pull", sourceImage); err != nil {
+					fmt.Printf("拉取镜像出错: %v\n", err)
 					pullErr = err
 				} else {
 					pullErr = nil
@@ -211,8 +247,8 @@ func main() {
 					// 从配置的 Docker 镜像仓库地址拉取镜像
 					fmt.Printf("正在从 %s 拉取镜像 %s\n", registry, sourceImage)
 					registryImage := fmt.Sprintf("%s/%s", registry, sourceImage)
-					if output, err := Execute("docker", "pull", registryImage); err != nil {
-						fmt.Printf("拉取镜像出错: %v\n%s", err, output)
+					if err := ExecuteWithProgress("docker", "pull", registryImage); err != nil {
+						fmt.Printf("拉取镜像出错: %v\n", err)
 						pullErr = err
 					} else {
 						// 标记为镜像名
@@ -256,8 +292,8 @@ func main() {
 
 			// 推送镜像到 Harbor 仓库
 			fmt.Printf("正在推送镜像 %s\n", targetImage)
-			if output, err := Execute("docker", "push", targetImage); err != nil {
-				log.Fatalf("推送镜像出错: %v\n%s", err, output)
+			if err := ExecuteWithProgress("docker", "push", targetImage); err != nil {
+				log.Fatalf("推送镜像出错: %v\n", err)
 			}
 
 			// 清理本地镜像
@@ -288,8 +324,8 @@ func main() {
 		if len(config.DockerRegistries) == 0 {
 			// 如果 DockerRegistries 为空，则直接拉取不带域名的镜像
 			fmt.Printf("正在从DockerHub拉取镜像 %s\n", sourceImage)
-			if output, err := Execute("docker", "pull", sourceImage); err != nil {
-				fmt.Printf("拉取镜像出错: %v\n%s", err, output)
+			if err := ExecuteWithProgress("docker", "pull", sourceImage); err != nil {
+				fmt.Printf("拉取镜像出错: %v\n", err)
 				pullErr = err
 			} else {
 				// 标记为镜像名
@@ -309,8 +345,8 @@ func main() {
 			for _, registry := range config.DockerRegistries {
 				// 从配置的 Docker 镜像仓库地址拉取镜像
 				fmt.Printf("正在从 %s 拉取镜像 %s\n", registry, sourceImage)
-				if output, err := Execute("docker", "pull", fmt.Sprintf("%s/%s", registry, sourceImage)); err != nil {
-					fmt.Printf("拉取镜像出错: %v\n%s", err, output)
+				if err := ExecuteWithProgress("docker", "pull", fmt.Sprintf("%s/%s", registry, sourceImage)); err != nil {
+					fmt.Printf("拉取镜像出错: %v\n", err)
 
 					// 标记为镜像名
 					fmt.Printf("正在将镜像 %s 标记为 %s\n", fmt.Sprintf("%s/%s", registry, sourceImage), image)
@@ -373,8 +409,8 @@ func main() {
 
 		// 推送镜像到 Harbor 仓库
 		fmt.Printf("正在推送镜像 %s\n", targetImage)
-		if output, err := Execute("docker", "push", targetImage); err != nil {
-			log.Fatalf("推送镜像出错: %v\n%s", err, output)
+		if err := ExecuteWithProgress("docker", "push", targetImage); err != nil {
+			log.Fatalf("推送镜像出错: %v\n", err)
 		}
 
 		// 清理本地标记的镜像
