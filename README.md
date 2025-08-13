@@ -116,6 +116,3 @@ dockerRegistries:
 - quay.m.daocloud.io
 - k8s.m.daocloud.io
 ```
-
-## **欢迎订阅我的公众号「SRE运维手记」**
-![](static/pic/4.png)
